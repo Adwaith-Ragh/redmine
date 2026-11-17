@@ -1,0 +1,43 @@
+services:
+  redmine-db:
+    image: postgres:16
+    container_name: redmine-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${REDMINE_DB_NAME:-redmine}
+      POSTGRES_USER: ${REDMINE_DB_USER:-redmine}
+      POSTGRES_PASSWORD: ${REDMINE_DB_PASSWORD:-redmine_password_123}
+    volumes:
+      - redmine-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${REDMINE_DB_USER:-redmine} -d ${REDMINE_DB_NAME:-redmine}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redmine:
+    image: redmine:6
+    container_name: redmine-app
+    restart: unless-stopped
+    depends_on:
+      redmine-db:
+        condition: service_healthy
+    ports:
+      - "3005:3000"
+    environment:
+      REDMINE_DB_POSTGRES: redmine-db
+      REDMINE_DB_PORT: 5432
+      REDMINE_DB_USERNAME: ${REDMINE_DB_USER:-redmine}
+      REDMINE_DB_PASSWORD: ${REDMINE_DB_PASSWORD:-redmine_password_123}
+      REDMINE_DB_DATABASE: ${REDMINE_DB_NAME:-redmine}
+      REDMINE_SECRET_KEY_BASE: ${REDMINE_SECRET_KEY_BASE:-f5c71d6fbb5bfa3d881ef44f479d2b271d44ea1e7d9954d7f57321e54911d3319be88aef6a12df082269a98ef2b8df1fae1088746ba1ec5e5ec024c0d12e6178}
+      SECRET_KEY_BASE: ${REDMINE_SECRET_KEY_BASE:-f5c71d6fbb5bfa3d881ef44f479d2b271d44ea1e7d9954d7f57321e54911d3319be88aef6a12df082269a98ef2b8df1fae1088746ba1ec5e5ec024c0d12e6178}
+    volumes:
+      - redmine-files:/usr/src/redmine/files
+      - ./seed.rb:/seed.rb:ro
+
+volumes:
+  redmine-db-data:
+    name: redmine-db-data
+  redmine-files:
+    name: redmine-files
