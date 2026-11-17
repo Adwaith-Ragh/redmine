@@ -65,25 +65,27 @@ statuses.keys.each do |old_id|
   end
 end
 
-# 4. Configure Custom Fields (IDs 1-9) matching Finance Mailer
+# 4. Configure Custom Fields (IDs 1-10) matching Finance Mailer & Subscriptions
 puts "[4/7] Configuring Custom Fields..."
 cfs_data = [
   { id: 1, name: 'Business Line', field_format: 'list', possible_values: ['Buy', 'Sell', 'Corporate', 'Internal'] },
-  { id: 2, name: 'Name of the License', field_format: 'string' },
+  { id: 2, name: 'Name of the License', field_format: 'list', possible_values: ['Claude', 'ChatGPT Team', 'GitHub Copilot', 'Google Gemini', 'Microsoft 365 Copilot', 'Notion', 'Figma'] },
   { id: 3, name: 'Purpose', field_format: 'text' },
   { id: 4, name: 'Name of the Project', field_format: 'string' },
-  { id: 5, name: 'Duration', field_format: 'string' },
+  { id: 5, name: 'Duration', field_format: 'string', default_value: '12 months' },
   { id: 6, name: 'BL Head/Project Manager', field_format: 'string' },
   { id: 7, name: 'Approved', field_format: 'list', possible_values: ['No', 'Yes'], default_value: 'No' },
   { id: 8, name: 'Billing Type', field_format: 'list', possible_values: ['Cost to Business Line', 'Cost to Project', 'Overhead'] },
-  { id: 9, name: 'Finance Notified', field_format: 'bool', default_value: '0' }
+  { id: 9, name: 'Finance Notified', field_format: 'bool', default_value: '0' },
+  { id: 10, name: 'Request Type', field_format: 'list', possible_values: ['New License / Renewal', 'Extra Credit'], default_value: 'New License / Renewal' }
 ]
 
 cfs_data.each do |d|
   cf = IssueCustomField.find_by(id: d[:id]) || IssueCustomField.new
   cf.id = d[:id]
   cf.name = d[:name]
-  cf.field_format = d[:field_format]
+  cf.update_column(:field_format, d[:field_format]) if cf.persisted? && cf.field_format != d[:field_format]
+  cf.field_format = d[:field_format] unless cf.persisted?
   cf.possible_values = d[:possible_values] if d[:possible_values]
   cf.default_value = d[:default_value] if d[:default_value]
   cf.is_for_all = true
@@ -170,7 +172,8 @@ common_cfs = {
   5 => '3 months',
   6 => 'Imran Ulla',
   8 => 'Cost to Business Line',
-  9 => '0'
+  9 => '0',
+  10 => 'New License / Renewal'
 }
 
 # --- Ticket 23593: Approved, valid approval history ---
@@ -285,6 +288,46 @@ cfs_23595.each do |cf_id, val|
   cv.save!
 end
 t23595.journals.destroy_all
+
+# --- Ticket 23596: Approved Extra Credit Request ---
+t23596 = Issue.find_by(id: 23596) || Issue.new
+t23596.id = 23596
+t23596.project = proj
+t23596.tracker_id = 12
+t23596.status_id = 2
+t23596.author_id = 10
+t23596.priority_id = 2
+t23596.subject = 'Extra API Credits for Claude Team'
+t23596.description = 'Requesting $50 additional API credits for Heineken project report workload.'
+t23596.created_on = Time.parse('2026-11-15T09:00:00Z')
+t23596.updated_on = Time.parse('2026-11-15T11:00:00Z')
+t23596.save!(validate: false)
+
+cfs_23596 = common_cfs.merge(
+  5 => 'N/A',
+  7 => 'Yes',
+  10 => 'Extra Credit'
+)
+cfs_23596.each do |cf_id, val|
+  cv = CustomValue.find_or_initialize_by(customized_type: 'Issue', customized_id: t23596.id, custom_field_id: cf_id)
+  cv.value = val
+  cv.save!
+end
+
+t23596.journals.destroy_all
+j_ec = t23596.journals.build(
+  user_id: 30,
+  created_on: Time.parse('2026-11-15T10:30:00Z'),
+  notes: 'Approved extra credit purchase.'
+)
+j_ec.save!
+jd_ec = j_ec.details.build(
+  property: 'cf',
+  prop_key: '7',
+  old_value: 'No',
+  value: 'Yes'
+)
+jd_ec.save!
 
 # Reset PostgreSQL sequences so new records don't collide
 ActiveRecord::Base.connection.tables.each do |table|
